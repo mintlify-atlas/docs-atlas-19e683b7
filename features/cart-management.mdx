@@ -1,0 +1,146 @@
+---
+title: "Cart management: add, update, and remove cart items"
+description: "Manage your shopping cart by adding, updating, and removing items. View your cart contents and running total with applied voucher discounts."
+---
+
+The cart is the central object in the system. Every user session has exactly one active cart, and all item operations — adding, updating, removing, and viewing — go through `CartApplicationService`. The service enforces stock validation and a per-cart item limit on every write operation.
+
+## Adding items
+
+Call `AddItem(cartId, productId, quantity)` to add a product to the cart.
+
+The service performs these checks in order:
+
+1. Verifies the cart exists.
+2. Verifies the product exists.
+3. Checks that the requested quantity does not exceed current stock.
+4. If the product is **not yet in the cart**, enforces the 10 unique-item limit and creates a new `CartItem`.
+5. If the product **is already in the cart**, accumulates the quantity and validates that the combined total does not exceed stock.
+
+```csharp CartApplicationService.cs
+public void AddItem(Guid cartId, Guid productId, int quantity)
+{
+    Cart existingCart = _dataService.GetCart(cartId);
+    _validation.CheckCart(existingCart, cartId);
+
+    Product existingProduct = _dataService.GetProduct(productId);
+    _validation.CheckProduct(existingProduct, productId);
+
+    _validation.CheckStockAvailability(existingProduct, quantity);
+
+    List<CartItem> cartItems = _dataService.GetCartItems(cartId);
+    CartItem existingItem = cartItems.FirstOrDefault(i => i.ProductId == productId);
+
+    if (existingItem == null)
+    {
+        _validation.CheckUniqueItemThreshold(cartItems.Count, CartValidation.MAX_UNIQUE_ITEMS);
+
+        CartItem newItem = new CartItem
+        {
+            ProductId = productId,
+            ProductName = existingProduct.Name,
+            Quantity = quantity,
+            UnitPrice = existingProduct.UnitPrice,
+            Status = CartItemStatus.NotAvailable
+        };
+        _dataService.AddItem(cartId, newItem);
+    }
+    else
+    {
+        _validation.CheckStockForAdditionalQuantity(existingProduct, existingItem.Quantity, quantity);
+        int totalQuantity = existingItem.Quantity + quantity;
+        existingItem.Quantity = totalQuantity;
+        existingItem.UnitPrice = existingProduct.UnitPrice;
+        _dataService.UpdateItem(cartId, existingItem);
+    }
+
+    UpdateItemStatusBasedOnStock(cartId, productId);
+}
+```
+
+<Warning>
+A cart can hold a maximum of **10 unique products**. Attempting to add an eleventh distinct product throws a `BusinessException`. You can still increase the quantity of an existing cart item beyond 10 — the limit applies only to distinct product entries.
+</Warning>
+
+<AccordionGroup>
+  <Accordion title="What happens when I add an item that's already in my cart?">
+    When you call `AddItem` for a product that is already present, the service does **not** create a second entry. Instead, it adds the new quantity to the existing item's quantity and re-validates the combined total against current stock. It also refreshes the stored `UnitPrice` to match the product's current price at the time of the call.
+  </Accordion>
+</AccordionGroup>
+
+## Updating quantity
+
+Call `UpdateItemQuantity(cartId, productId, newQuantity)` to set a new quantity for an item already in the cart.
+
+- `newQuantity` must be greater than zero.
+- The service validates that the new quantity does not exceed the product's current stock.
+- After the update, the item's status is recalculated based on stock.
+
+## Removing items
+
+Call `RemoveItem(cartId, productId)` to delete an item from the cart entirely. The service confirms that the item is present before removing it.
+
+## Viewing cart contents
+
+| Method | Returns |
+|---|---|
+| `GetCartItems(cartId)` | `List<CartItem>` — all items currently in the cart |
+| `GetCartTotal(cartId)` | `decimal` — sum of `quantity × unitPrice` for all items, minus any applied voucher discounts |
+
+```csharp CartApplicationService.cs
+public decimal GetCartTotal(Guid cartId)
+{
+    Cart existingCart = _dataService.GetCart(cartId);
+    _validation.CheckCart(existingCart, cartId);
+
+    decimal total = _dataService.GetCartTotal(cartId);
+
+    List<Voucher> vouchers = _dataService.GetCartVouchers(cartId);
+    if (vouchers.Count == 0) return total;
+
+    List<CartItem> items = _dataService.GetCartItems(cartId);
+    List<Product> products = _dataService.GetAllProducts();
+
+    foreach (var voucher in vouchers)
+    {
+        if (voucher.Type == VoucherType.Platform)
+        {
+            total -= voucher.DiscountAmount;
+        }
+        else if (voucher.Type == VoucherType.Seller)
+        {
+            decimal sellerSubtotal = 0;
+            foreach (var item in items)
+            {
+                var product = products.FirstOrDefault(p => p.Id == item.ProductId);
+                if (product != null && product.SellerId == voucher.SellerId)
+                {
+                    sellerSubtotal += item.Quantity * item.UnitPrice;
+                }
+            }
+            decimal discountToApply = Math.Min(sellerSubtotal, voucher.DiscountAmount);
+            total -= discountToApply;
+        }
+    }
+
+    return Math.Max(0, total);
+}
+```
+
+The total is always floored at `0` — it cannot go negative regardless of the vouchers applied.
+
+## Clearing the cart
+
+Call `ClearCart(cartId)` to remove all items from the cart without deleting the cart itself. The cart remains associated with the user and ready for new items.
+
+## Cart item status
+
+Each `CartItem` carries a `CartItemStatus` value that reflects its availability relative to current stock:
+
+| Status | Meaning |
+|---|---|
+| `NotAvailable` | Default state; the item's requested quantity is within available stock |
+| `OutOfStock` | The product has no remaining stock, or the requested quantity exceeds stock |
+| `CheckedOut` | Reserved for items that have completed checkout. Defined in the enum but not assigned by the current implementation. |
+
+The status is updated automatically whenever `AddItem` or `UpdateItemQuantity` is called.

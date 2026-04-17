@@ -1,0 +1,71 @@
+---
+title: "Product catalog: browse items and check stock levels"
+description: "Browse all available products, retrieve individual product details, and check real-time stock levels before adding items to your cart."
+---
+
+The product catalog is the source of truth for item names, prices, and available inventory. All cart operations that involve a product — adding, updating, or checking out — validate against the catalog at runtime to ensure prices and stock counts are current.
+
+## Browsing products
+
+### Get all products
+
+```csharp
+List<Product> products = cartService.GetAllProducts();
+```
+
+Returns the complete list of `Product` objects currently in the data store. The console UI uses this list to render the product selection table on the main screen.
+
+### Get a single product
+
+```csharp
+Product product = cartService.GetProduct(productId);
+```
+
+Returns a single `Product` by its `Id`. Returns `null` if no product with that `Id` exists.
+
+### Check available stock
+
+```csharp
+int stock = cartService.GetAvailableStock(productId);
+```
+
+Returns the current `Stock` value for the given product. Throws a `BusinessException` if the product does not exist. Use this to display live inventory counts before prompting a user for a quantity.
+
+## Product model
+
+```csharp Product.cs
+public class Product
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; }
+    public int Stock { get; set; }
+    public decimal UnitPrice { get; set; }
+    public Guid SellerId { get; set; }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `Id` | `Guid` | Unique identifier for the product |
+| `Name` | `string` | Display name shown in the cart and order summary |
+| `UnitPrice` | `decimal` | Price per unit in Philippine Peso (PHP) |
+| `Stock` | `int` | Number of units currently available |
+| `SellerId` | `Guid` | Identifier of the seller who listed the product |
+
+`SellerId` is used by seller-type vouchers to scope discounts to items from a specific seller. See [Vouchers](/features/vouchers) for details.
+
+## Sample products
+
+The in-memory data store seeds the following products on startup:
+
+| Name | Price (PHP) | Stock |
+|---|---|---|
+| Laptop | ₱45,000.00 | 10 |
+| Smartphone | ₱12,000.00 | 20 |
+| Headphones | ₱350.00 | 30 |
+| Shoes | ₱200.00 | 15 |
+| Backpack | ₱300.00 | 25 |
+
+<Note>
+All prices are displayed and stored in **Philippine Peso (PHP)**. The `UnitPrice` field is a `decimal` value representing the peso amount — for example, `45000m` equals ₱45,000.00.
+</Note>

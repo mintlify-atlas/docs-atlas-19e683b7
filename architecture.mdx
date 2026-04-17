@@ -1,0 +1,177 @@
+---
+title: "Architecture: three-layer N-Tier design and interfaces"
+description: "How the Core, ApplicationService, and DataService layers are structured, what each one owns, and how dependencies flow through the system."
+---
+
+Cart Management System applies N-Tier architecture to keep business rules, data access, and presentation completely independent of one another. Each of the three logical layers lives in its own C# class library project, with dependencies pointing strictly downward: the console entry point depends on `ApplicationService`, `ApplicationService` depends on both `Core` and `DataService`, and `Core` depends on nothing else in the solution.
+
+## Layer overview
+
+<CardGroup cols={3}>
+  <Card title="Core" icon="cube">
+    Models, enums, validation logic, and exception types. No dependency on any other solution project.
+  </Card>
+  <Card title="ApplicationService" icon="gear">
+    Business logic orchestration. Calls `ICartValidation` and `ICartDataService`. Exposed to the UI via `ICartApplicationService`.
+  </Card>
+  <Card title="DataService" icon="database">
+    Storage implementations. Three classes — `InMemoryDataService`, `JsonFileDataService`, `DatabaseDataService` — all implement `ICartDataService`.
+  </Card>
+</CardGroup>
+
+## Dependency flow
+
+```text
+Program.cs (Cart Management)
+  └── ICartApplicationService
+        └── CartApplicationService
+              ├── ICartValidation  →  CartValidation        (Core)
+              └── ICartDataService →  InMemoryDataService   (DataService)
+                                      JsonFileDataService
+                                      DatabaseDataService
+```
+
+`Program.cs` constructs the concrete implementations and passes them into `CartApplicationService` via constructor injection. Swapping a backend means changing one line:
+
+```csharp Program.cs
+ICartDataService dataService = new InMemoryDataService();
+ICartValidation validation = new CartValidation();
+_cartService = new CartApplicationService(dataService, validation);
+```
+
+<Note>
+  To switch storage backends, replace `new InMemoryDataService()` with `new JsonFileDataService()` or `new DatabaseDataService()`. No other file needs to change because `CartApplicationService` only ever references the `ICartDataService` interface.
+</Note>
+
+## Core layer
+
+The `Cart Management.Core` project defines everything that the other layers share. It has no outbound dependencies within the solution.
+
+### Models
+
+| Class | Key properties |
+|---|---|
+| `Cart` | `Id`, `UserId`, `Items`, `AppliedVouchers` |
+| `CartItem` | `ProductId`, `ProductName`, `Quantity`, `UnitPrice`, `Status` |
+| `Product` | `Id`, `Name`, `Stock`, `UnitPrice`, `SellerId` |
+| `Voucher` | `Id`, `Code`, `Type`, `DiscountAmount`, `SellerId` |
+| `CartVoucher` | `CartId`, `VoucherId` |
+
+### Enums
+
+- **`CartItemStatus`** — `NotAvailable`, `OutOfStock`, `CheckedOut`. Tracks the fulfilment state of each item.
+- **`VoucherType`** — `Platform`, `Seller`. Determines how a discount is scoped and calculated.
+
+### Validation
+
+`ICartValidation` and its implementation `CartValidation` contain every guard condition in the system. All checks throw typed exceptions so callers can distinguish between user errors, business rule violations, and data problems.
+
+```csharp ICartValidation.cs
+public interface ICartValidation
+{
+    void CheckCart(Cart cart, Guid cartId);
+    void CheckCartNotEmpty(List<CartItem> items);
+    void CheckMergeCartIds(Guid guestCartId, Guid userCartId);
+
+    void CheckCartItem(CartItem item);
+    void CheckItemInCart(CartItem item, Guid productId);
+    void CheckUpdateQuantity(int newQuantity);
+
+    void CheckProduct(Product product, Guid productId);
+    void CheckStockAvailability(Product product, int requestedQuantity);
+    void CheckStockForAdditionalQuantity(Product product, int existingQuantity, int addedQuantity);
+    void CheckStockForCheckout(Product product, int requestedQuantity);
+
+    void CheckUserId(Guid userId);
+    void CheckUniqueItemThreshold(int currentUniqueItemsCount, int threshold);
+    void CheckVoucherApplicable(Voucher voucher, List<CartItem> cartItems, List<Product> products);
+}
+```
+
+The cart item cap is defined as a constant on `CartValidation`:
+
+```csharp CartValidation.cs
+public const int MAX_UNIQUE_ITEMS = 10;
+```
+
+### Exceptions
+
+Three exception types allow callers to handle failures at the right level of granularity:
+
+```csharp Exceptions.cs
+public class BusinessException : Exception  { /* rule violation, e.g. cart limit reached */ }
+public class DataException     : Exception  { /* data integrity problem */                  }
+public class UserException     : Exception  { /* invalid user input, e.g. empty GUID */     }
+```
+
+## ApplicationService layer
+
+`CartApplicationService` is the single class that orchestrates every user-facing operation. It accepts `ICartDataService` and `ICartValidation` through its constructor, calls validation before any mutation, and delegates storage reads and writes entirely to the data service.
+
+```csharp ICartApplicationService.cs
+public interface ICartApplicationService
+{
+    Guid  CreateCart(Guid userId);
+    Guid? GetCartByUserId(Guid userId);
+    Cart  GetCart(Guid cartId);
+    decimal GetCartTotal(Guid cartId);
+    void  ClearCart(Guid cartId);
+    void  CheckoutCart(Guid cartId);
+
+    List<CartItem> GetCartItems(Guid cartId);
+    void AddItem(Guid cartId, Guid productId, int quantity);
+    void UpdateItemQuantity(Guid cartId, Guid productId, int newQuantity);
+    void RemoveItem(Guid cartId, Guid productId);
+    void UpdateCartItemPrices(Guid cartId);
+
+    List<Product> GetAllProducts();
+    Product       GetProduct(Guid productId);
+    int           GetAvailableStock(Guid productId);
+
+    List<Voucher> GetAllVouchers();
+    List<Voucher> GetCartVouchers(Guid cartId);
+    void          ApplyVoucher(Guid cartId, string code);
+}
+```
+
+Notable behaviours implemented in `CartApplicationService`:
+
+- **Voucher discount calculation** — `Platform` vouchers deduct a flat amount from the grand total; `Seller` vouchers deduct only from the subtotal of items belonging to that seller, capped at that subtotal. The final total is floored at zero.
+- **Checkout stock deduction** — each item's stock is validated, then decremented via `ICartDataService.UpdateStock`, before the cart is cleared.
+- **Item price refresh** — `UpdateCartItemPrices` syncs stored unit prices against current product prices immediately before checkout.
+
+## DataService layer
+
+All three storage backends implement the same interface:
+
+```csharp ICartDataService.cs
+public interface ICartDataService
+{
+    Cart   CreateCart(Guid userId);
+    Cart   GetCart(Guid cartId);
+    Cart   GetCartByUserId(Guid userId);
+    void   ClearCart(Guid cartId);
+    decimal GetCartTotal(Guid cartId);
+
+    List<CartItem> GetCartItems(Guid cartId);
+    void AddItem(Guid cartId, CartItem item);
+    void UpdateItem(Guid cartId, CartItem item);
+    void RemoveItem(Guid cartId, Guid productId);
+    void UpdateCartItemStatus(Guid cartId, Guid productId, CartItemStatus status);
+
+    List<Product> GetAllProducts();
+    Product       GetProduct(Guid productId);
+    void          UpdateStock(Guid productId, int quantityChange);
+
+    List<Voucher> GetAllVouchers();
+    Voucher       GetVoucherByCode(string code);
+    void          ApplyVoucherToCart(Guid cartId, Guid voucherId);
+    List<Voucher> GetCartVouchers(Guid cartId);
+}
+```
+
+| Implementation | Persistence | Configuration |
+|---|---|---|
+| `InMemoryDataService` | None — `List<T>` fields, lost on exit | None. Pre-seeds products and vouchers in constructor. |
+| `JsonFileDataService` | JSON files on disk via `System.Text.Json` | File paths set inside the class. |
+| `DatabaseDataService` | SQL Server Express | Connection string inside the class points to `localhost\SQLEXPRESS`, database `CartMgmt`. |

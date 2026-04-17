@@ -1,0 +1,142 @@
+---
+title: "Vouchers: apply platform and seller discount codes"
+description: "Apply platform-wide or seller-specific discount codes to your cart. Vouchers reduce the cart total automatically when GetCartTotal is called."
+---
+
+Vouchers let users reduce their cart total by entering a discount code. The system supports two voucher types: platform vouchers that apply to the entire cart, and seller vouchers that apply only to items from a specific seller. Discounts are calculated inside `GetCartTotal` each time the total is requested.
+
+## Voucher types
+
+<Tabs>
+  <Tab title="Platform voucher">
+    A `VoucherType.Platform` voucher deducts its `DiscountAmount` from the full cart total, regardless of which products are in the cart or who sells them.
+
+    **Example:** Applying `WELCOME100` (discount: ₱100.00) to a cart totalling ₱500.00 yields a final total of ₱400.00.
+
+    ```csharp
+    if (voucher.Type == VoucherType.Platform)
+    {
+        total -= voucher.DiscountAmount;
+    }
+    ```
+
+    Platform vouchers have no `SellerId` — the field is `null`.
+  </Tab>
+  <Tab title="Seller voucher">
+    A `VoucherType.Seller` voucher deducts its `DiscountAmount` only from the subtotal of items belonging to the voucher's `SellerId`. The discount is capped at the seller's subtotal using `Math.Min`, so it can never reduce the total by more than the seller's items are worth.
+
+    **Example:** Applying `SELLER50` (discount: ₱50.00) when the cart contains ₱45,000.00 worth of seller1 items deducts ₱50.00. If the seller's subtotal were only ₱30.00, only ₱30.00 would be deducted.
+
+    ```csharp
+    else if (voucher.Type == VoucherType.Seller)
+    {
+        decimal sellerSubtotal = 0;
+        foreach (var item in items)
+        {
+            var product = products.FirstOrDefault(p => p.Id == item.ProductId);
+            if (product != null && product.SellerId == voucher.SellerId)
+            {
+                sellerSubtotal += item.Quantity * item.UnitPrice;
+            }
+        }
+        decimal discountToApply = Math.Min(sellerSubtotal, voucher.DiscountAmount);
+        total -= discountToApply;
+    }
+    ```
+
+    <Note>
+      A seller voucher only applies when your cart contains at least one item from that seller. Attempting to apply it to a cart with no matching seller items throws a `BusinessException`.
+    </Note>
+  </Tab>
+</Tabs>
+
+## Discount calculation
+
+The full discount logic runs inside `GetCartTotal`:
+
+```csharp CartApplicationService.cs
+public decimal GetCartTotal(Guid cartId)
+{
+    Cart existingCart = _dataService.GetCart(cartId);
+    _validation.CheckCart(existingCart, cartId);
+
+    decimal total = _dataService.GetCartTotal(cartId);
+
+    List<Voucher> vouchers = _dataService.GetCartVouchers(cartId);
+    if (vouchers.Count == 0) return total;
+
+    List<CartItem> items = _dataService.GetCartItems(cartId);
+    List<Product> products = _dataService.GetAllProducts();
+
+    foreach (var voucher in vouchers)
+    {
+        if (voucher.Type == VoucherType.Platform)
+        {
+            total -= voucher.DiscountAmount;
+        }
+        else if (voucher.Type == VoucherType.Seller)
+        {
+            decimal sellerSubtotal = 0;
+            foreach (var item in items)
+            {
+                var product = products.FirstOrDefault(p => p.Id == item.ProductId);
+                if (product != null && product.SellerId == voucher.SellerId)
+                {
+                    sellerSubtotal += item.Quantity * item.UnitPrice;
+                }
+            }
+            decimal discountToApply = Math.Min(sellerSubtotal, voucher.DiscountAmount);
+            total -= discountToApply;
+        }
+    }
+
+    return Math.Max(0, total);
+}
+```
+
+The result is always floored at `0` — stacking multiple vouchers cannot produce a negative total.
+
+## Applying a voucher
+
+```csharp
+cartService.ApplyVoucher(cartId, "WELCOME100");
+```
+
+`ApplyVoucher(cartId, code)` looks up the voucher by code (case-insensitive), validates that it is applicable to the cart, and records the association. The same voucher cannot be applied to the same cart twice.
+
+## Listing vouchers
+
+| Method | Returns |
+|---|---|
+| `GetAllVouchers()` | `List<Voucher>` — all vouchers in the system |
+| `GetCartVouchers(cartId)` | `List<Voucher>` — vouchers already applied to a specific cart |
+
+## Voucher model
+
+```csharp Voucher.cs
+public class Voucher
+{
+    public Guid Id { get; set; }
+    public string Code { get; set; }
+    public VoucherType Type { get; set; }
+    public decimal DiscountAmount { get; set; }
+    public Guid? SellerId { get; set; }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `Id` | `Guid` | Unique identifier |
+| `Code` | `string` | Human-readable code entered by the user (e.g., `WELCOME100`) |
+| `Type` | `VoucherType` | `Platform` or `Seller` |
+| `DiscountAmount` | `decimal` | Amount deducted in PHP |
+| `SellerId` | `Guid?` | Seller the voucher applies to; `null` for platform vouchers |
+
+## Built-in seed vouchers
+
+The in-memory data store seeds two vouchers on startup:
+
+| Code | Type | Discount | Applies to |
+|---|---|---|---|
+| `WELCOME100` | Platform | ₱100.00 | All items in cart |
+| `SELLER50` | Seller | ₱50.00 | Items from seller1 (Laptop) |

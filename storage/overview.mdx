@@ -1,0 +1,49 @@
+---
+title: "Storage backends: compare and switch implementations"
+description: "Compare three storage backends — InMemory, JSON file, and SQL Server — all implementing ICartDataService so you can swap them with one line change."
+---
+
+All three storage backends implement `ICartDataService` and are fully interchangeable. You can switch between them by changing a single line in `Program.cs` — no other code needs to change.
+
+## Comparison
+
+| Backend | Persistence | Setup required | Best for |
+|---------|-------------|----------------|----------|
+| `InMemoryDataService` | None (lost on exit) | None | Development and testing |
+| `JsonFileDataService` | Yes (JSON files) | None | Local persistence without a database |
+| `DatabaseDataService` | Yes (SQL Server) | SQL Server Express required | Production-like persistence |
+
+## How to swap backends
+
+The wiring happens on a single line in `Program.cs`. Change the concrete class to switch backends:
+
+```csharp Program.cs
+// Default — no persistence
+ICartDataService dataService = new InMemoryDataService();
+
+// JSON file persistence — no setup required
+ICartDataService dataService = new JsonFileDataService();
+
+// SQL Server persistence — requires SQL Server Express
+ICartDataService dataService = new DatabaseDataService();
+```
+
+The `ICartDataService` interface defines the full contract — carts, items, products, and vouchers — so `CartApplicationService` works identically regardless of which backend is active.
+
+<Tip>
+Use `InMemoryDataService` during development to start quickly with no dependencies. Switch to `JsonFileDataService` when you want data to survive application restarts without setting up a database.
+</Tip>
+
+## Explore each backend
+
+<CardGroup cols={3}>
+  <Card title="InMemory" icon="memory" href="/storage/in-memory">
+    Data lives in process memory. No files, no databases. Ideal for development and testing.
+  </Card>
+  <Card title="JSON file" icon="file-code" href="/storage/json-file">
+    Reads and writes four JSON files in the application directory. Data survives restarts.
+  </Card>
+  <Card title="SQL Server" icon="database" href="/storage/database">
+    Full SQL Server Express backend. Requires local database setup before first run.
+  </Card>
+</CardGroup>

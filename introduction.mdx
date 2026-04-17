@@ -1,0 +1,54 @@
+---
+title: "Cart Management System: N-Tier console app overview"
+description: "Cart Management System is a C# console app using N-Tier architecture for cart, product, and voucher management across three interchangeable storage backends."
+---
+
+Cart Management System is a C# console application that solves the problem of building a structured, maintainable shopping cart without a web framework. It separates concerns across three distinct project layers — Core, ApplicationService, and DataService — so that business rules stay independent of how data is stored, and the console UI stays independent of both. Whether you need an in-memory prototype or a SQL Server-backed production store, you swap one class and nothing else changes.
+
+## What the system does
+
+The application gives you a live terminal menu where you can browse a product catalogue (with real-time stock counts and prices in PHP), add items to a persistent cart, apply discount voucher codes, and complete a checkout that deducts stock and resets the cart. Every interaction goes through a validated service layer, so invalid inputs, missing products, and stock overruns are caught with descriptive error messages before any data is touched.
+
+<Note>
+  Each cart can hold a maximum of 10 unique product types. Adding an eleventh distinct product raises a `BusinessException` enforced by `CartValidation.CheckUniqueItemThreshold`.
+</Note>
+
+## N-Tier architecture overview
+
+The solution is split into four C# projects. Three of them form the N-Tier stack; the fourth is the console entry point.
+
+| Layer | Project | Responsibility |
+|---|---|---|
+| Core | `Cart Management.Core` | Models, enums, validation, exceptions |
+| Application | `Cart Management.ApplicationService` | Business logic orchestration |
+| Data | `Cart Management.DataService` | Storage implementation |
+| UI | `Cart Management` | Console presentation and input |
+
+Each layer references only the layer below it. The console (`Program.cs`) talks to `ICartApplicationService`. `CartApplicationService` talks to `ICartDataService` and `ICartValidation`. Neither interface knows anything about the other layers.
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="Cart management" icon="basket-shopping" href="/features/cart-management">
+    Add items, update quantities, and remove products. Subtotals and totals update immediately, and a 10-item type cap prevents oversized carts.
+  </Card>
+  <Card title="Product catalogue" icon="tag" href="/features/products">
+    Browse all available products with live stock levels and unit prices denominated in PHP. Stock is decremented atomically at checkout.
+  </Card>
+  <Card title="Voucher discounts" icon="ticket" href="/features/vouchers">
+    Apply platform-wide (`Platform`) or seller-specific (`Seller`) discount codes. Seller vouchers are validated against the products in your cart before they are accepted.
+  </Card>
+  <Card title="Checkout flow" icon="receipt" href="/features/checkout">
+    Choose a shipping method (Standard or Express) and a payment method (Cash on Delivery or Card), review an order summary, and confirm to place the order.
+  </Card>
+</CardGroup>
+
+## Supported storage backends
+
+Three implementations of `ICartDataService` ship with the project:
+
+- **InMemoryDataService** — stores all data in `List<T>` fields. Fast, zero-configuration, and lost on exit. Pre-seeded with sample products and vouchers including `WELCOME100`.
+- **JsonFileDataService** — reads and writes JSON files on disk using `System.Text.Json`. Data survives application restarts.
+- **DatabaseDataService** — persists data to a SQL Server Express instance (`CartMgmt` database) via `Microsoft.Data.SqlClient`. Suitable for shared or multi-session use.
+
+Switching backends requires changing a single line in `Program.cs`. See [Architecture](/architecture) for details.

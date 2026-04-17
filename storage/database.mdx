@@ -1,0 +1,97 @@
+---
+title: "SQL Server storage: setup and database persistence"
+description: "DatabaseDataService connects to a local SQL Server Express instance and persists cart, product, and voucher data across sessions using ADO.NET queries."
+---
+
+`DatabaseDataService` stores all data in a local SQL Server Express database named `CartMgmt`. It provides full persistence across sessions and is the closest option to a production deployment. The database and tables must be created before running the application with this backend.
+
+## Connection string
+
+The service connects using Windows authentication (integrated security):
+
+```
+Data Source=localhost\SQLEXPRESS; Initial Catalog=CartMgmt; Integrated Security=True; TrustServerCertificate=True;
+```
+
+<Warning>
+Integrated security requires Windows authentication. SQL Server Express must be installed and running on `localhost\SQLEXPRESS`, and the Windows account running the application must have access to the `CartMgmt` database.
+</Warning>
+
+## Required tables
+
+Create five tables in the `CartMgmt` database before the first run:
+
+```sql
+CREATE TABLE Carts (
+    Id     UNIQUEIDENTIFIER PRIMARY KEY,
+    UserId UNIQUEIDENTIFIER NOT NULL
+);
+
+CREATE TABLE CartItems (
+    CartId      UNIQUEIDENTIFIER NOT NULL,
+    ProductId   UNIQUEIDENTIFIER NOT NULL,
+    ProductName NVARCHAR(255)    NOT NULL,
+    Quantity    INT              NOT NULL,
+    UnitPrice   DECIMAL(18,2)    NOT NULL,
+    Status      NVARCHAR(50)     NULL
+);
+
+CREATE TABLE Products (
+    Id        UNIQUEIDENTIFIER PRIMARY KEY,
+    Name      NVARCHAR(255)  NOT NULL,
+    UnitPrice DECIMAL(18,2)  NOT NULL,
+    Stock     INT            NOT NULL,
+    SellerId  UNIQUEIDENTIFIER NOT NULL
+);
+
+CREATE TABLE Vouchers (
+    Id             UNIQUEIDENTIFIER PRIMARY KEY,
+    Code           NVARCHAR(50)   NOT NULL,
+    Type           NVARCHAR(50)   NOT NULL,
+    DiscountAmount DECIMAL(18,2)  NOT NULL,
+    SellerId       UNIQUEIDENTIFIER NULL
+);
+
+CREATE TABLE CartVouchers (
+    CartId    UNIQUEIDENTIFIER NOT NULL,
+    VoucherId UNIQUEIDENTIFIER NOT NULL
+);
+```
+
+## Seed data
+
+On first run, if the `Products` table is empty, `DatabaseDataService` inserts five products and two vouchers automatically:
+
+- **Products**: Laptop (₱45,000), Smartphone (₱12,000), Headphones (₱350), Shoes (₱200), Backpack (₱300)
+- **Vouchers**: `WELCOME100` (platform discount, ₱100) and `SELLER50` (seller discount, ₱50)
+
+Subsequent runs skip seeding because the table is no longer empty.
+
+## Setup
+
+<Steps>
+  <Step title="Install SQL Server Express">
+    Download and install [SQL Server Express](https://www.microsoft.com/en-us/sql-server/sql-server-downloads) on your machine. Ensure the instance name is `SQLEXPRESS` and that it is running.
+  </Step>
+  <Step title="Create the CartMgmt database">
+    Open SQL Server Management Studio (SSMS) or another SQL client and run:
+
+    ```sql
+    CREATE DATABASE CartMgmt;
+    ```
+  </Step>
+  <Step title="Create the required tables">
+    Connect to the `CartMgmt` database and run the `CREATE TABLE` statements shown in the [Required tables](#required-tables) section above.
+  </Step>
+  <Step title="Update the wiring in Program.cs">
+    Change the data service instantiation in `Program.cs`:
+
+    ```csharp Program.cs
+    ICartDataService dataService = new DatabaseDataService();
+    ICartValidation validation = new CartValidation();
+    _cartService = new CartApplicationService(dataService, validation);
+    ```
+
+    Run the application. Products and vouchers are seeded automatically on first startup.
+  </Step>
+</Steps>

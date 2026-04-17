@@ -1,0 +1,175 @@
+---
+title: "Checkout flow: review order summary and place order"
+description: "Walk through the checkout flow: refresh item prices, choose shipping and payment, review the order summary, and place the order to deduct stock."
+---
+
+Checkout is the final step that converts a cart into a confirmed order. The system re-validates stock for every item, deducts inventory, and then clears the cart. A new empty cart is automatically created for the user immediately after a successful checkout.
+
+## Checkout sequence
+
+<Steps>
+  <Step title="Refresh item prices">
+    Before displaying the order summary, the system calls `UpdateCartItemPrices(cartId)` to sync each cart item's stored `UnitPrice` with the product's current price. This ensures the order total reflects the latest prices even if they changed after items were added.
+
+    ```csharp
+    cartService.UpdateCartItemPrices(cartId);
+    ```
+  </Step>
+  <Step title="Compute the final total">
+    `GetCartTotal(cartId)` sums `quantity × unitPrice` for all items and deducts any applied voucher discounts. The result is the amount the user will be charged.
+
+    ```csharp
+    decimal orderTotal = cartService.GetCartTotal(cartId);
+    ```
+  </Step>
+  <Step title="Select shipping method">
+    The console prompts the user to choose a shipping option:
+
+    - **[1] Standard** — default if any non-`2` input is entered
+    - **[2] Express**
+
+    The selection is stored as a display string (`"Standard"` or `"Express"`) for the order summary.
+  </Step>
+  <Step title="Select payment method">
+    The console prompts the user to choose a payment option:
+
+    - **[1] Cash on Delivery** — default if any non-`2` input is entered
+    - **[2] Card**
+  </Step>
+  <Step title="Review the order summary">
+    The console displays a full order summary before the user confirms:
+
+    - Each item with `quantity × unitPrice`
+    - Applied vouchers with their discount amounts
+    - Selected shipping method
+    - Selected payment method
+    - Final total in PHP
+
+    ```csharp Program.cs
+    Console.WriteLine(" Order Summary");
+    foreach (CartItem cartItem in finalCartItems)
+    {
+        Console.WriteLine(" {0,3}x {1,-14} {2,10:F2}",
+            cartItem.Quantity,
+            Truncate(cartItem.ProductName, 14),
+            cartItem.Quantity * cartItem.UnitPrice);
+    }
+    Console.WriteLine(" -------------------------");
+    foreach (Voucher appliedVoucher in appliedVouchers)
+    {
+        Console.WriteLine(" Voucher  : {0} (-{1:F2})",
+            appliedVoucher.Code,
+            appliedVoucher.DiscountAmount);
+    }
+    Console.WriteLine(" Shipping : {0}", shippingMethod);
+    Console.WriteLine(" Payment  : {0}", paymentMethod);
+    Console.WriteLine(" Total    : PHP {0:F2}", orderTotal);
+    ```
+  </Step>
+  <Step title="Confirm and place the order">
+    The user is prompted with `Place order? (Y/N)`. Entering `Y` triggers `CheckoutCart(cartId)`, which:
+
+    1. Verifies the cart is not empty.
+    2. Validates that every item has sufficient stock.
+    3. Deducts the ordered quantity from each product's stock.
+    4. Clears the cart.
+
+    After checkout, a new cart is created automatically:
+
+    ```csharp Program.cs
+    _cartService.CheckoutCart(_currentCartId);
+    Console.WriteLine(" Order placed! New cart created.");
+    _currentCartId = _cartService.CreateCart(_currentUserId);
+    ```
+  </Step>
+</Steps>
+
+## Full checkout flow
+
+```csharp Program.cs
+private static void Checkout(List<CartItem> cartItems)
+{
+    if (cartItems.Count == 0)
+    {
+        Console.WriteLine(" Cart is empty.");
+        Pause();
+        return;
+    }
+    _cartService.UpdateCartItemPrices(_currentCartId);
+    decimal orderTotal = _cartService.GetCartTotal(_currentCartId);
+
+    Console.WriteLine();
+    Console.WriteLine(" Checkout");
+    Console.WriteLine(" [1] Standard  [2] Express");
+    Console.Write(" Shipping: ");
+    string shippingInput = Console.ReadLine();
+    int shippingChoice = (shippingInput == "2") ? 2 : 1;
+    string shippingMethod = (shippingChoice == 1) ? "Standard" : "Express";
+
+    Console.WriteLine(" [1] Cash on Delivery  [2] Card");
+    Console.Write(" Payment: ");
+    string paymentInput = Console.ReadLine();
+    int paymentChoice = (paymentInput == "2") ? 2 : 1;
+    string paymentMethod = (paymentChoice == 1) ? "Cash on Delivery" : "Card";
+
+    Console.WriteLine();
+    Console.WriteLine(" Order Summary");
+    List<CartItem> finalCartItems = _cartService.GetCartItems(_currentCartId);
+    foreach (CartItem cartItem in finalCartItems)
+    {
+        Console.WriteLine(" {0,3}x {1,-14} {2,10:F2}",
+            cartItem.Quantity,
+            Truncate(cartItem.ProductName, 14),
+            cartItem.Quantity * cartItem.UnitPrice);
+    }
+    Console.WriteLine(" -------------------------");
+    List<Voucher> appliedVouchers = _cartService.GetCartVouchers(_currentCartId);
+    if (appliedVouchers.Count > 0)
+    {
+        foreach (Voucher appliedVoucher in appliedVouchers)
+        {
+            Console.WriteLine(" Voucher  : {0} (-{1:F2})",
+                appliedVoucher.Code,
+                appliedVoucher.DiscountAmount);
+        }
+    }
+    else
+    {
+        Console.WriteLine(" Voucher  : (none)");
+    }
+    Console.WriteLine(" Shipping : {0}", shippingMethod);
+    Console.WriteLine(" Payment  : {0}", paymentMethod);
+    Console.WriteLine(" Total    : PHP {0:F2}", orderTotal);
+    Console.WriteLine(" -------------------------");
+
+    Console.Write(" Place order? (Y/N): ");
+    if (char.ToUpper(Console.ReadKey().KeyChar) == 'Y')
+    {
+        Console.WriteLine();
+        _cartService.CheckoutCart(_currentCartId);
+        Console.WriteLine(" Order placed! New cart created.");
+        _currentCartId = _cartService.CreateCart(_currentUserId);
+    }
+    else
+    {
+        Console.WriteLine("\n Checkout cancelled.");
+    }
+    Pause();
+}
+```
+
+## Stock validation at checkout
+
+`CheckoutCart` performs a final stock check for every item before deducting inventory. This is a second validation pass — stock levels may have changed between when items were added and when the order is placed.
+
+<Warning>
+If **any** item in the cart has insufficient stock at the time `CheckoutCart` is called, the entire order is rejected and a `BusinessException` is thrown. No stock is deducted and the cart remains unchanged. Remove or reduce the quantity of the affected item before trying again.
+</Warning>
+
+## After checkout
+
+Once the order is placed:
+
+- All items are removed from the cart via `ClearCart`.
+- Each product's `Stock` is decremented by the ordered quantity via `UpdateStock`.
+- A brand-new cart is created for the user with `CreateCart`, ready for the next session.

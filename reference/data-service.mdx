@@ -1,0 +1,320 @@
+---
+title: "ICartDataService: data access interface and methods"
+description: "Method reference for ICartDataService — the low-level data access contract implemented by InMemoryDataService, JsonFileDataService, and DatabaseDataService."
+---
+
+`ICartDataService` defines the contract between the application layer and any backing data store. All business logic lives in `CartApplicationService`; this interface handles only raw persistence operations — no validation is performed at this layer.
+
+```csharp ICartDataService.cs
+public interface ICartDataService
+{
+    Cart CreateCart(Guid userId);
+    Cart GetCart(Guid cartId);
+    Cart GetCartByUserId(Guid userId);
+    void ClearCart(Guid cartId);
+    decimal GetCartTotal(Guid cartId);
+
+    List<CartItem> GetCartItems(Guid cartId);
+    void AddItem(Guid cartId, CartItem item);
+    void UpdateItem(Guid cartId, CartItem item);
+    void RemoveItem(Guid cartId, Guid productId);
+    void UpdateCartItemStatus(Guid cartId, Guid productId, CartItemStatus status);
+
+    List<Product> GetAllProducts();
+    Product GetProduct(Guid productId);
+    void UpdateStock(Guid productId, int quantityChange);
+
+    List<Voucher> GetAllVouchers();
+    Voucher GetVoucherByCode(string code);
+    void ApplyVoucherToCart(Guid cartId, Guid voucherId);
+    List<Voucher> GetCartVouchers(Guid cartId);
+}
+```
+
+<Note>
+  All three storage implementations — InMemory, JsonFile, and Database — are fully interchangeable. You can swap the implementation injected into `CartApplicationService` without changing any application or validation code.
+</Note>
+
+---
+
+## Storage implementations
+
+Three implementations of `ICartDataService` are included:
+
+| Implementation | Description |
+|----------------|-------------|
+| InMemory | Stores all data in memory. Data is lost when the process exits. Useful for testing and prototyping. See [In-Memory storage](/storage/in-memory). |
+| JsonFile | Persists data to a JSON file on disk. Data survives restarts. See [JSON file storage](/storage/json-file). |
+| Database | Persists data to a relational database. Suitable for production use. See [Database storage](/storage/database). |
+
+---
+
+## Cart methods
+
+### CreateCart
+
+Creates a new `Cart` record for the given user and returns it.
+
+<ParamField path="userId" type="Guid" required>
+  The ID of the user who owns the new cart.
+</ParamField>
+
+**Returns**
+
+<ResponseField name="Cart" type="Cart">
+  The newly created cart object with a generated `Id`.
+</ResponseField>
+
+---
+
+### GetCart
+
+Retrieves a cart by its ID.
+
+<ParamField path="cartId" type="Guid" required>
+  The ID of the cart to retrieve.
+</ParamField>
+
+**Returns**
+
+<ResponseField name="Cart" type="Cart">
+  The matching cart, or `null` if not found.
+</ResponseField>
+
+---
+
+### GetCartByUserId
+
+Looks up the cart associated with a user.
+
+<ParamField path="userId" type="Guid" required>
+  The user whose cart to find.
+</ParamField>
+
+**Returns**
+
+<ResponseField name="Cart" type="Cart">
+  The cart for that user, or `null` if the user has no cart.
+</ResponseField>
+
+---
+
+### ClearCart
+
+Removes all items from the cart identified by `cartId`.
+
+<ParamField path="cartId" type="Guid" required>
+  The ID of the cart to clear.
+</ParamField>
+
+**Returns** `void`
+
+---
+
+### GetCartTotal
+
+Computes the raw subtotal of all items in the cart (`quantity × unitPrice` for each item). Voucher discounts are **not** applied at this layer — that calculation happens in `CartApplicationService.GetCartTotal`.
+
+<ParamField path="cartId" type="Guid" required>
+  The ID of the cart to total.
+</ParamField>
+
+**Returns**
+
+<ResponseField name="decimal" type="decimal">
+  The sum of all item subtotals before any discount.
+</ResponseField>
+
+---
+
+## Cart item methods
+
+### GetCartItems
+
+Returns all items currently in a cart.
+
+<ParamField path="cartId" type="Guid" required>
+  The ID of the cart.
+</ParamField>
+
+**Returns**
+
+<ResponseField name="List&lt;CartItem&gt;" type="List&lt;CartItem&gt;">
+  The list of cart items. Returns an empty list if the cart has no items.
+</ResponseField>
+
+---
+
+### AddItem
+
+Inserts a new `CartItem` into a cart.
+
+<ParamField path="cartId" type="Guid" required>
+  The ID of the cart to add the item to.
+</ParamField>
+
+<ParamField path="item" type="CartItem" required>
+  The fully constructed `CartItem` to persist.
+</ParamField>
+
+**Returns** `void`
+
+---
+
+### UpdateItem
+
+Replaces the stored `CartItem` (matched by `ProductId`) with the updated version.
+
+<ParamField path="cartId" type="Guid" required>
+  The ID of the cart containing the item.
+</ParamField>
+
+<ParamField path="item" type="CartItem" required>
+  The updated `CartItem`. The `ProductId` is used to locate the existing record.
+</ParamField>
+
+**Returns** `void`
+
+---
+
+### RemoveItem
+
+Deletes a specific item from a cart.
+
+<ParamField path="cartId" type="Guid" required>
+  The ID of the cart containing the item.
+</ParamField>
+
+<ParamField path="productId" type="Guid" required>
+  The product ID of the item to remove.
+</ParamField>
+
+**Returns** `void`
+
+---
+
+### UpdateCartItemStatus
+
+Updates the `CartItemStatus` of a specific item within a cart.
+
+<ParamField path="cartId" type="Guid" required>
+  The ID of the cart containing the item.
+</ParamField>
+
+<ParamField path="productId" type="Guid" required>
+  The product ID of the item whose status to update.
+</ParamField>
+
+<ParamField path="status" type="CartItemStatus" required>
+  The new status value (`NotAvailable`, `OutOfStock`, or `CheckedOut`).
+</ParamField>
+
+**Returns** `void`
+
+---
+
+## Product methods
+
+### GetAllProducts
+
+Returns every product in the data store.
+
+**Returns**
+
+<ResponseField name="List&lt;Product&gt;" type="List&lt;Product&gt;">
+  All products.
+</ResponseField>
+
+---
+
+### GetProduct
+
+Returns a single product by its ID.
+
+<ParamField path="productId" type="Guid" required>
+  The ID of the product to retrieve.
+</ParamField>
+
+**Returns**
+
+<ResponseField name="Product" type="Product">
+  The matching product, or `null` if not found.
+</ResponseField>
+
+---
+
+### UpdateStock
+
+Adjusts the stock level of a product by a delta value. Pass a negative number to deduct stock (e.g., `-item.Quantity` during checkout).
+
+<ParamField path="productId" type="Guid" required>
+  The ID of the product whose stock to update.
+</ParamField>
+
+<ParamField path="quantityChange" type="int" required>
+  The amount to add to the current stock. Use a negative value to deduct.
+</ParamField>
+
+**Returns** `void`
+
+---
+
+## Voucher methods
+
+### GetAllVouchers
+
+Returns every voucher in the data store.
+
+**Returns**
+
+<ResponseField name="List&lt;Voucher&gt;" type="List&lt;Voucher&gt;">
+  All vouchers.
+</ResponseField>
+
+---
+
+### GetVoucherByCode
+
+Looks up a voucher by its string code.
+
+<ParamField path="code" type="string" required>
+  The voucher code to search for.
+</ParamField>
+
+**Returns**
+
+<ResponseField name="Voucher" type="Voucher">
+  The matching voucher, or `null` if no voucher with that code exists.
+</ResponseField>
+
+---
+
+### ApplyVoucherToCart
+
+Records that a voucher has been applied to a cart by creating a `CartVoucher` join record.
+
+<ParamField path="cartId" type="Guid" required>
+  The ID of the cart to apply the voucher to.
+</ParamField>
+
+<ParamField path="voucherId" type="Guid" required>
+  The ID of the voucher to apply.
+</ParamField>
+
+**Returns** `void`
+
+---
+
+### GetCartVouchers
+
+Returns all vouchers applied to a specific cart.
+
+<ParamField path="cartId" type="Guid" required>
+  The ID of the cart whose applied vouchers to retrieve.
+</ParamField>
+
+**Returns**
+
+<ResponseField name="List&lt;Voucher&gt;" type="List&lt;Voucher&gt;">
+  The vouchers applied to the cart. Returns an empty list if none have been applied.
+</ResponseField>

@@ -1,0 +1,65 @@
+{
+  "projectType": "general",
+  "projectName": "Cart Management System",
+  "projectDescription": "A C# console application for managing a shopping cart with product browsing, item management, discount vouchers, and checkout across multiple storage backends.",
+  "theme": "almond",
+  "primaryColor": "#3B82F6",
+  "lightColor": "#EFF6FF",
+  "darkColor": "#1E3A5F",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": ["introduction", "quickstart", "architecture"]
+          },
+          {
+            "group": "Features",
+            "pages": ["features/cart-management", "features/products", "features/vouchers", "features/checkout"]
+          },
+          {
+            "group": "Storage Backends",
+            "pages": ["storage/overview", "storage/in-memory", "storage/json-file", "storage/database"]
+          },
+          {
+            "group": "Reference",
+            "pages": ["reference/application-service", "reference/data-service", "reference/models", "reference/exceptions"]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Add, update, and remove items from a shopping cart",
+    "Browse available products with stock and pricing in PHP",
+    "Apply platform-wide and seller-specific discount vouchers",
+    "10 unique product type limit per cart",
+    "Three interchangeable storage backends: InMemory, JSON file, and SQL database",
+    "N-Tier Architecture separating Core, ApplicationService, and DataService layers",
+    "Checkout flow with shipping and payment method selection",
+    "Automatic stock validation and cart item status tracking"
+  ],
+  "publicApiSurface": [
+    "ICartApplicationService.CreateCart(Guid userId)",
+    "ICartApplicationService.GetCartByUserId(Guid userId)",
+    "ICartApplicationService.GetCart(Guid cartId)",
+    "ICartApplicationService.GetCartTotal(Guid cartId)",
+    "ICartApplicationService.ClearCart(Guid cartId)",
+    "ICartApplicationService.CheckoutCart(Guid cartId)",
+    "ICartApplicationService.GetCartItems(Guid cartId)",
+    "ICartApplicationService.AddItem(Guid cartId, Guid productId, int quantity)",
+    "ICartApplicationService.UpdateItemQuantity(Guid cartId, Guid productId, int newQuantity)",
+    "ICartApplicationService.RemoveItem(Guid cartId, Guid productId)",
+    "ICartApplicationService.UpdateCartItemPrices(Guid cartId)",
+    "ICartApplicationService.GetAllProducts()",
+    "ICartApplicationService.GetProduct(Guid productId)",
+    "ICartApplicationService.GetAvailableStock(Guid productId)",
+    "ICartApplicationService.GetAllVouchers()",
+    "ICartApplicationService.GetCartVouchers(Guid cartId)",
+    "ICartApplicationService.ApplyVoucher(Guid cartId, string code)",
+    "ICartDataService (InMemoryDataService / JsonFileDataService / DatabaseDataService)",
+    "ICartValidation (CartValidation)"
+  ]
+}

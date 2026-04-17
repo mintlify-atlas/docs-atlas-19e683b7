@@ -1,0 +1,94 @@
+---
+title: "Exception reference: Business, Data, and User errors"
+description: "Reference for BusinessException, DataException, and UserException — trigger scenarios and example messages from CartValidation and CartApplicationService."
+---
+
+The Cart Management System uses three custom exception types, all derived directly from `System.Exception`. They signal failures at different layers of the application so consuming code can handle each category appropriately.
+
+```csharp Exceptions.cs
+namespace Cart_Management.Core.Exceptions
+{
+    public class BusinessException : Exception
+    {
+        public BusinessException(string message) : base(message) { }
+    }
+
+    public class DataException : Exception
+    {
+        public DataException(string message) : base(message) { }
+    }
+
+    public class UserException : Exception
+    {
+        public UserException(string message) : base(message) { }
+    }
+}
+```
+
+<Tip>
+  In consuming code, catch each exception type separately and display its `Message` directly to the user — the messages are written to be human-readable. For example, a `DisplayError` helper that writes the message in a distinct color lets you surface `UserException` as input feedback, `BusinessException` as an operation warning, and `DataException` as a system-level error without leaking stack traces.
+</Tip>
+
+---
+
+## BusinessException
+
+Thrown when a request is syntactically valid but violates a business rule — for example, attempting to check out an empty cart or applying a seller voucher to a cart that contains no products from that seller.
+
+**Raised by:** `CartValidation`, `CartApplicationService`
+
+| Scenario | Trigger location | Example message |
+|----------|-----------------|-----------------|
+| Cart not found by ID | `CartValidation.CheckCart` | `"Cart '{cartId}' not found."` |
+| Cart ID mismatch | `CartValidation.CheckCart` | `"Cart ID mismatch. Expected: '{cartId}', Actual: '{cart.Id}'."` |
+| Cart is empty at checkout | `CartValidation.CheckCartNotEmpty` | `"Cart is empty."` |
+| Product not found by ID | `CartValidation.CheckProduct` | `"Product '{productId}' not found."` |
+| Product is out of stock | `CartValidation.CheckStockAvailability` | `"Product '{product.Name}' is out of stock."` |
+| Requested quantity exceeds stock | `CartValidation.CheckStockAvailability` | `"Only {product.Stock} units of '{product.Name}' are available in stock."` |
+| Combined quantity exceeds stock when adding to existing item | `CartValidation.CheckStockForAdditionalQuantity` | `"Cannot add {addedQuantity} units of '{product.Name}' to cart. Only {product.Stock - existingQuantity} more units can be added."` |
+| Insufficient stock at checkout time | `CartValidation.CheckStockForCheckout` | `"Insufficient stock for '{product.Name}'. Requested: {requestedQuantity}, Available: {product.Stock}."` |
+| Cart has reached the 10-unique-item limit | `CartValidation.CheckUniqueItemThreshold` | `"Cart has reached its limit of 10 unique items."` |
+| Product not in cart when updating or removing | `CartValidation.CheckItemInCart` | `"Product '{productId}' is not in the cart."` |
+| Voucher code does not exist | `CartApplicationService.ApplyVoucher` | `"Voucher with code '{code}' does not exist."` |
+| Voucher not found during applicability check | `CartValidation.CheckVoucherApplicable` | `"Voucher not found."` |
+| Seller voucher has null or empty SellerId | `CartValidation.CheckVoucherApplicable` | `"Invalid seller voucher."` |
+| Seller voucher applied to cart with no items from that seller | `CartValidation.CheckVoucherApplicable` | `"This voucher can only be applied to items from the specific seller."` |
+
+---
+
+## DataException
+
+Thrown when a data operation fails at the storage layer — for example, when a record cannot be located in the data store during a read or write operation.
+
+**Raised by:** Data service implementations (`InMemoryDataService`, `JsonFileDataService`, `DatabaseDataService`)
+
+| Scenario | Example message |
+|----------|-----------------|
+| Cart not found when attempting to add an item (`InMemoryDataService`, `JsonFileDataService`) | `"Cart with id '{cartId}' not found."` |
+| Product not found during a stock update (`InMemoryDataService`, `JsonFileDataService`, `DatabaseDataService`) | `"Product with id '{productId}' not found."` |
+
+<Note>
+  `DataException` is distinct from `BusinessException` to allow consuming code to distinguish between a business rule violation (recoverable by the user changing their input) and a data integrity problem (likely a system or configuration issue requiring investigation).
+</Note>
+
+---
+
+## UserException
+
+Thrown when the caller provides input that fails basic validation — such as an empty GUID, a zero or negative quantity, or a blank product name. These errors indicate a problem with the input before any business logic is applied.
+
+**Raised by:** `CartValidation`
+
+| Scenario | Trigger location | Example message |
+|----------|-----------------|-----------------|
+| `userId` is `Guid.Empty` | `CartValidation.CheckUserId` | `"UserId cannot be empty."` |
+| `cartId` is `Guid.Empty` | `CartValidation.CheckCart` | `"CartId cannot be empty."` |
+| `productId` is `Guid.Empty` | `CartValidation.CheckProduct` | `"ProductId cannot be empty."` |
+| `newQuantity` is less than or equal to zero in `UpdateItemQuantity` | `CartValidation.CheckUpdateQuantity` | `"Quantity must be greater than zero."` |
+| `Quantity` on a `CartItem` is less than or equal to zero | `CartValidation.CheckCartItem` | `"Quantity must be greater than zero."` |
+| `UnitPrice` on a `CartItem` is negative | `CartValidation.CheckCartItem` | `"Unit price cannot be negative."` |
+| `ProductName` on a `CartItem` is null or whitespace | `CartValidation.CheckCartItem` | `"Product name cannot be empty."` |
+| `CartItem` itself is null | `CartValidation.CheckCartItem` | `"Cart item cannot be null."` |
+| Guest cart ID is `Guid.Empty` during a merge | `CartValidation.CheckMergeCartIds` | `"Guest CartId cannot be empty."` |
+| User cart ID is `Guid.Empty` during a merge | `CartValidation.CheckMergeCartIds` | `"User CartId cannot be empty."` |
+| Guest cart and user cart IDs are identical | `CartValidation.CheckMergeCartIds` | `"Guest cart and user cart cannot be the same."` |

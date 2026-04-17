@@ -1,0 +1,433 @@
+---
+title: "ICartApplicationService: complete method reference"
+description: "Method reference for ICartApplicationService — parameters, return types, and exceptions for every cart, item, product, and voucher operation."
+---
+
+`ICartApplicationService` is the single entry point for all cart operations. It sits between the application layer and the data layer, applying validation rules before delegating to `ICartDataService`. Every public method either throws a `BusinessException` or `UserException` on failure, or returns the requested value on success.
+
+```csharp ICartApplicationService.cs
+public interface ICartApplicationService
+{
+    Guid CreateCart(Guid userId);
+    Guid? GetCartByUserId(Guid userId);
+    Cart GetCart(Guid cartId);
+    decimal GetCartTotal(Guid cartId);
+    void ClearCart(Guid cartId);
+    void CheckoutCart(Guid cartId);
+
+    List<CartItem> GetCartItems(Guid cartId);
+    void AddItem(Guid cartId, Guid productId, int quantity);
+    void UpdateItemQuantity(Guid cartId, Guid productId, int newQuantity);
+    void RemoveItem(Guid cartId, Guid productId);
+    void UpdateCartItemPrices(Guid cartId);
+
+    List<Product> GetAllProducts();
+    Product GetProduct(Guid productId);
+    int GetAvailableStock(Guid productId);
+
+    List<Voucher> GetAllVouchers();
+    List<Voucher> GetCartVouchers(Guid cartId);
+    void ApplyVoucher(Guid cartId, string code);
+}
+```
+
+---
+
+## Cart operations
+
+<AccordionGroup>
+  <Accordion title="CreateCart">
+    Creates a new cart for the specified user and returns its ID.
+
+    **Parameters**
+
+    <ParamField path="userId" type="Guid" required>
+      The ID of the user who owns the new cart. Must not be `Guid.Empty`.
+    </ParamField>
+
+    **Returns**
+
+    <ResponseField name="Guid" type="Guid">
+      The ID of the newly created cart.
+    </ResponseField>
+
+    **Exceptions**
+
+    | Exception | Condition |
+    |-----------|-----------|
+    | `UserException` | `userId` is `Guid.Empty`. |
+  </Accordion>
+
+  <Accordion title="GetCartByUserId">
+    Looks up the cart associated with a user. Returns `null` if no cart exists for that user.
+
+    **Parameters**
+
+    <ParamField path="userId" type="Guid" required>
+      The ID of the user whose cart to look up. Must not be `Guid.Empty`.
+    </ParamField>
+
+    **Returns**
+
+    <ResponseField name="Guid?" type="Guid?">
+      The cart ID if a cart exists for the user, or `null` if none is found.
+    </ResponseField>
+
+    **Exceptions**
+
+    | Exception | Condition |
+    |-----------|-----------|
+    | `UserException` | `userId` is `Guid.Empty`. |
+  </Accordion>
+
+  <Accordion title="GetCart">
+    Retrieves the full `Cart` object for a given cart ID.
+
+    **Parameters**
+
+    <ParamField path="cartId" type="Guid" required>
+      The ID of the cart to retrieve.
+    </ParamField>
+
+    **Returns**
+
+    <ResponseField name="Cart" type="Cart">
+      The cart with its items and applied vouchers.
+    </ResponseField>
+
+    **Exceptions**
+
+    | Exception | Condition |
+    |-----------|-----------|
+    | `BusinessException` | No cart found with the given `cartId`. |
+  </Accordion>
+
+  <Accordion title="GetCartTotal">
+    Calculates the cart total after applying all voucher discounts. The result is never negative — it is floored at `0`.
+
+    Platform vouchers deduct their `DiscountAmount` from the entire cart total. Seller vouchers deduct up to their `DiscountAmount` from the subtotal of items belonging to the voucher's seller.
+
+    **Parameters**
+
+    <ParamField path="cartId" type="Guid" required>
+      The ID of the cart to total.
+    </ParamField>
+
+    **Returns**
+
+    <ResponseField name="decimal" type="decimal">
+      The cart total after all voucher discounts, minimum `0`.
+    </ResponseField>
+
+    **Exceptions**
+
+    | Exception | Condition |
+    |-----------|-----------|
+    | `BusinessException` | No cart found with the given `cartId`. |
+  </Accordion>
+
+  <Accordion title="ClearCart">
+    Removes all items from the cart. Applied vouchers are not affected.
+
+    **Parameters**
+
+    <ParamField path="cartId" type="Guid" required>
+      The ID of the cart to clear.
+    </ParamField>
+
+    **Returns**
+
+    `void`
+
+    **Exceptions**
+
+    | Exception | Condition |
+    |-----------|-----------|
+    | `BusinessException` | No cart found with the given `cartId`. |
+  </Accordion>
+
+  <Accordion title="CheckoutCart">
+    Validates that every item has sufficient stock, deducts stock for each item, then clears the cart.
+
+    The method performs two passes over the item list: first it validates all stock levels, then it deducts stock — so a checkout either succeeds completely or fails before any deduction occurs.
+
+    **Parameters**
+
+    <ParamField path="cartId" type="Guid" required>
+      The ID of the cart to check out.
+    </ParamField>
+
+    **Returns**
+
+    `void`
+
+    **Exceptions**
+
+    | Exception | Condition |
+    |-----------|-----------|
+    | `BusinessException` | No cart found with the given `cartId`. |
+    | `BusinessException` | Cart is empty (no items). |
+    | `BusinessException` | A product referenced by a cart item is not found. |
+    | `BusinessException` | Insufficient stock for one or more items at checkout time. |
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Item operations
+
+<AccordionGroup>
+  <Accordion title="GetCartItems">
+    Returns the list of items currently in the cart.
+
+    **Parameters**
+
+    <ParamField path="cartId" type="Guid" required>
+      The ID of the cart whose items to retrieve.
+    </ParamField>
+
+    **Returns**
+
+    <ResponseField name="List&lt;CartItem&gt;" type="List&lt;CartItem&gt;">
+      All items in the cart. Returns an empty list if the cart has no items.
+    </ResponseField>
+
+    **Exceptions**
+
+    | Exception | Condition |
+    |-----------|-----------|
+    | `BusinessException` | No cart found with the given `cartId`. |
+  </Accordion>
+
+  <Accordion title="AddItem">
+    Adds a product to the cart. If the product is already in the cart, the quantity is incremented rather than creating a duplicate entry. The item's `UnitPrice` is always set to the current product price at the time of the call.
+
+    A cart may contain at most 10 unique products (`CartValidation.MAX_UNIQUE_ITEMS`).
+
+    **Parameters**
+
+    <ParamField path="cartId" type="Guid" required>
+      The ID of the cart to add the item to.
+    </ParamField>
+
+    <ParamField path="productId" type="Guid" required>
+      The ID of the product to add.
+    </ParamField>
+
+    <ParamField path="quantity" type="int" required>
+      Number of units to add. Must be greater than zero.
+    </ParamField>
+
+    **Returns**
+
+    `void`
+
+    **Exceptions**
+
+    | Exception | Condition |
+    |-----------|-----------|
+    | `BusinessException` | No cart found with the given `cartId`. |
+    | `BusinessException` | No product found with the given `productId`. |
+    | `UserException` | `productId` is `Guid.Empty`. |
+    | `BusinessException` | Product is out of stock. |
+    | `BusinessException` | Requested quantity exceeds available stock. |
+    | `BusinessException` | Adding the quantity would exceed available stock when combined with the existing cart quantity. |
+    | `BusinessException` | Cart already contains 10 unique items and the product is not already in the cart. |
+  </Accordion>
+
+  <Accordion title="UpdateItemQuantity">
+    Sets the quantity of an existing cart item to a new value. The new quantity must not exceed current available stock.
+
+    **Parameters**
+
+    <ParamField path="cartId" type="Guid" required>
+      The ID of the cart containing the item.
+    </ParamField>
+
+    <ParamField path="productId" type="Guid" required>
+      The ID of the product whose quantity to update.
+    </ParamField>
+
+    <ParamField path="newQuantity" type="int" required>
+      The replacement quantity. Must be greater than zero.
+    </ParamField>
+
+    **Returns**
+
+    `void`
+
+    **Exceptions**
+
+    | Exception | Condition |
+    |-----------|-----------|
+    | `UserException` | `newQuantity` is less than or equal to zero. |
+    | `BusinessException` | No cart found with the given `cartId`. |
+    | `BusinessException` | The specified product is not in the cart. |
+    | `BusinessException` | `newQuantity` exceeds available stock. |
+  </Accordion>
+
+  <Accordion title="RemoveItem">
+    Removes a specific product from the cart entirely.
+
+    **Parameters**
+
+    <ParamField path="cartId" type="Guid" required>
+      The ID of the cart containing the item.
+    </ParamField>
+
+    <ParamField path="productId" type="Guid" required>
+      The ID of the product to remove.
+    </ParamField>
+
+    **Returns**
+
+    `void`
+
+    **Exceptions**
+
+    | Exception | Condition |
+    |-----------|-----------|
+    | `BusinessException` | No cart found with the given `cartId`. |
+    | `BusinessException` | The specified product is not in the cart. |
+  </Accordion>
+
+  <Accordion title="UpdateCartItemPrices">
+    Iterates over all items in the cart and updates each item's `UnitPrice` to match the current price in the product catalog. Items whose price has not changed are left untouched.
+
+    **Parameters**
+
+    <ParamField path="cartId" type="Guid" required>
+      The ID of the cart whose item prices to refresh.
+    </ParamField>
+
+    **Returns**
+
+    `void`
+
+    **Exceptions**
+
+    | Exception | Condition |
+    |-----------|-----------|
+    | `BusinessException` | No cart found with the given `cartId`. |
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Product operations
+
+<AccordionGroup>
+  <Accordion title="GetAllProducts">
+    Returns all products available in the catalog.
+
+    **Returns**
+
+    <ResponseField name="List&lt;Product&gt;" type="List&lt;Product&gt;">
+      Every product in the data store.
+    </ResponseField>
+  </Accordion>
+
+  <Accordion title="GetProduct">
+    Returns a single product by its ID.
+
+    **Parameters**
+
+    <ParamField path="productId" type="Guid" required>
+      The ID of the product to retrieve.
+    </ParamField>
+
+    **Returns**
+
+    <ResponseField name="Product" type="Product">
+      The matching product, or `null` if no product with that ID exists.
+    </ResponseField>
+  </Accordion>
+
+  <Accordion title="GetAvailableStock">
+    Returns the current stock level for a product.
+
+    **Parameters**
+
+    <ParamField path="productId" type="Guid" required>
+      The ID of the product to check. Must not be `Guid.Empty`.
+    </ParamField>
+
+    **Returns**
+
+    <ResponseField name="int" type="int">
+      The number of units currently in stock.
+    </ResponseField>
+
+    **Exceptions**
+
+    | Exception | Condition |
+    |-----------|-----------|
+    | `BusinessException` | No product found with the given `productId`. |
+    | `UserException` | `productId` is `Guid.Empty`. |
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Voucher operations
+
+<AccordionGroup>
+  <Accordion title="GetAllVouchers">
+    Returns all vouchers available in the system.
+
+    **Returns**
+
+    <ResponseField name="List&lt;Voucher&gt;" type="List&lt;Voucher&gt;">
+      Every voucher in the data store.
+    </ResponseField>
+  </Accordion>
+
+  <Accordion title="GetCartVouchers">
+    Returns the list of vouchers already applied to a cart.
+
+    **Parameters**
+
+    <ParamField path="cartId" type="Guid" required>
+      The ID of the cart whose vouchers to retrieve.
+    </ParamField>
+
+    **Returns**
+
+    <ResponseField name="List&lt;Voucher&gt;" type="List&lt;Voucher&gt;">
+      Vouchers applied to the cart. Returns an empty list if none have been applied.
+    </ResponseField>
+
+    **Exceptions**
+
+    | Exception | Condition |
+    |-----------|-----------|
+    | `BusinessException` | No cart found with the given `cartId`. |
+  </Accordion>
+
+  <Accordion title="ApplyVoucher">
+    Applies a voucher to a cart by its code. Seller vouchers are only applicable when the cart contains at least one product from the voucher's seller.
+
+    **Parameters**
+
+    <ParamField path="cartId" type="Guid" required>
+      The ID of the cart to apply the voucher to.
+    </ParamField>
+
+    <ParamField path="code" type="string" required>
+      The voucher code string to look up and apply.
+    </ParamField>
+
+    **Returns**
+
+    `void`
+
+    **Exceptions**
+
+    | Exception | Condition |
+    |-----------|-----------|
+    | `BusinessException` | No cart found with the given `cartId`. |
+    | `BusinessException` | No voucher found with the given `code`. |
+    | `BusinessException` | Voucher is a seller voucher but the cart contains no items from that seller. |
+    | `BusinessException` | Seller voucher has a null or empty `SellerId`. |
+  </Accordion>
+</AccordionGroup>

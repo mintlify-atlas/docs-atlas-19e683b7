@@ -1,0 +1,65 @@
+---
+title: "InMemory storage: zero-setup, in-process data store"
+description: "InMemoryDataService stores all cart, product, and voucher data in private List fields in process memory — no files or databases required."
+---
+
+`InMemoryDataService` holds all data in private `List<T>` fields in process memory. There are no external dependencies, no files written to disk, and no setup required. It is the default backend and the fastest way to run the application.
+
+<Note>
+`InMemoryDataService` is the default backend configured in `Program.cs`. You do not need to change anything to use it.
+</Note>
+
+## How it works
+
+Data is stored in four private list fields on the service instance:
+
+```csharp InMemoryDataService.cs
+private List<Cart> dummyCarts = new List<Cart>();
+private List<Product> dummyProducts = new List<Product>();
+private List<Voucher> dummyVouchers = new List<Voucher>();
+private List<CartVoucher> dummyCartVouchers = new List<CartVoucher>();
+```
+
+All read and write operations act directly on these lists. Nothing is serialized or persisted to disk at any point.
+
+## Pre-seeded data
+
+The constructor populates products and vouchers on startup so the application has something to display immediately:
+
+```csharp InMemoryDataService.cs
+public InMemoryDataService()
+{
+    Guid seller1 = Guid.NewGuid();
+    Guid seller2 = Guid.NewGuid();
+    dummyProducts = new List<Product>
+    {
+        new Product { Id = Guid.NewGuid(), Name = "Laptop",     UnitPrice = 45000m, Stock = 10, SellerId = seller1 },
+        new Product { Id = Guid.NewGuid(), Name = "Smartphone", UnitPrice = 12000m, Stock = 20, SellerId = seller2 },
+        new Product { Id = Guid.NewGuid(), Name = "Headphones", UnitPrice = 350m,   Stock = 30, SellerId = Guid.NewGuid() },
+        new Product { Id = Guid.NewGuid(), Name = "Shoes",      UnitPrice = 200m,   Stock = 15, SellerId = Guid.NewGuid() },
+        new Product { Id = Guid.NewGuid(), Name = "Backpack",   UnitPrice = 300m,   Stock = 25, SellerId = Guid.NewGuid() }
+    };
+
+    dummyVouchers = new List<Voucher>
+    {
+        new Voucher { Id = Guid.NewGuid(), Code = "WELCOME100", Type = VoucherType.Platform, DiscountAmount = 100m },
+        new Voucher { Id = Guid.NewGuid(), Code = "SELLER50", Type = VoucherType.Seller, DiscountAmount = 50m, SellerId = seller1 }
+    };
+}
+```
+
+Seller IDs are generated fresh each run with `Guid.NewGuid()`, so they differ between sessions.
+
+## How to use it
+
+`InMemoryDataService` is already active by default. To be explicit, or to switch back from another backend, set it in `Program.cs`:
+
+```csharp Program.cs
+ICartDataService dataService = new InMemoryDataService();
+ICartValidation validation = new CartValidation();
+_cartService = new CartApplicationService(dataService, validation);
+```
+
+<Warning>
+All cart data — including items added, quantities changed, and vouchers applied — is lost when the application exits. Each run starts from a fresh state with only the seeded products and vouchers.
+</Warning>

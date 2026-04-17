@@ -1,80 +1,150 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: "Quickstart: run Cart Management and place an order"
+description: "Run the Cart Management System console app in Visual Studio, place your first order, and apply a discount voucher in under five minutes."
 ---
 
-## Get started in three steps
+Cart Management System is a .NET console application that runs entirely from the terminal. This guide walks you from cloning the repository to placing a completed order — including adding items, applying a voucher code, and confirming checkout.
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
+- **Visual Studio 2022** (Community edition is fine) with the **.NET desktop development** workload installed
+- **.NET 6.0 or later** runtime
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+No database or additional services are needed if you use the default InMemory storage backend.
 
-### Step 2: Deploy your changes
+## Steps
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+<Steps>
+  <Step title="Open the solution in Visual Studio">
+    Clone or download the repository, then open `Cart Management.sln` located in the `Cart Management/` folder. Visual Studio will restore NuGet packages automatically.
+  </Step>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+  <Step title="Choose a storage backend">
+    Open `Cart Management/Program.cs`. Line 18 sets the active data service. Choose the backend that fits your needs:
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    <Tabs>
+      <Tab title="InMemory (default)">
+        Data is stored in memory and lost when the application exits. No setup required — best for trying out the app.
 
-### Step 3: Go live
+        ```csharp Program.cs
+        ICartDataService dataService = new InMemoryDataService();
+        ICartValidation validation = new CartValidation();
+        _cartService = new CartApplicationService(dataService, validation);
+        ```
+      </Tab>
+      <Tab title="JSON File">
+        Data is saved to `Carts.json`, `Products.json`, `Vouchers.json`, and `CartVouchers.json` in the output directory. Data survives application restarts.
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+        ```csharp Program.cs
+        ICartDataService dataService = new JsonFileDataService();
+        ICartValidation validation = new CartValidation();
+        _cartService = new CartApplicationService(dataService, validation);
+        ```
+      </Tab>
+      <Tab title="SQL Server Database">
+        Requires SQL Server Express running locally with a `CartMgmt` database. See [SQL Server storage](/storage/database) for setup instructions.
+
+        ```csharp Program.cs
+        ICartDataService dataService = new DatabaseDataService();
+        ICartValidation validation = new CartValidation();
+        _cartService = new CartApplicationService(dataService, validation);
+        ```
+      </Tab>
+    </Tabs>
+
+    <Tip>
+      For your first run, keep the default `InMemoryDataService`. Switch to `JsonFileDataService` when you want cart data to persist between sessions.
+    </Tip>
+  </Step>
+
+  <Step title="Run the application">
+    Press **F5** or click the **Start** button. The console window opens and displays the product list, your (initially empty) cart, and the available voucher codes, followed by the action menu:
+
+    ```text
+    Cart Management System
+    ==========================================
+
+    Products:
+    #   Name                  Price (PHP)  Stock
+    ------------------------------------------
+    1.  Laptop                   45000.00     10
+    2.  Smartphone               12000.00     20
+    3.  Headphones                 350.00     30
+    4.  Shoes                      200.00     15
+    5.  Backpack                   300.00     25
+
+    Cart (0 items):
+    (empty)
+
+    Vouchers:
+    Code                Type         Discount
+    ------------------------------------------
+    WELCOME100          Platform       100.00
+    SELLER50            Seller          50.00
+
+    [1] Add to Cart        [4] Apply Voucher
+    [2] Update Quantity    [5] Checkout
+    [3] Remove Item        [0] Quit
+
+      >
+    ```
+  </Step>
+
+  <Step title="Add an item to your cart">
+    Press **1** to add an item. Enter the product number and quantity when prompted:
+
+    ```text
+      > 1
+     Product #: 3
+     Quantity: 2
+     Added.
+    ```
+
+    This adds 2× Headphones (₱350.00 each) to your cart. The screen refreshes to show the updated cart with a subtotal of ₱700.00.
+  </Step>
+
+  <Step title="Apply a voucher and checkout">
+    Press **4** to apply a discount voucher. Enter `WELCOME100` to deduct ₱100.00 from your total:
+
+    ```text
+      > 4
+     Voucher code: WELCOME100
+     Voucher applied.
+    ```
+
+    Press **5** to proceed to checkout. Select your shipping method (**1** for Standard, **2** for Express) and payment method (**1** for Cash on Delivery, **2** for Card). Review the order summary and press **Y** to confirm:
+
+    ```text
+     Order Summary
+       2x Headphones       700.00
+     -------------------------
+     Voucher  : WELCOME100 (-100.00)
+     Shipping : Standard
+     Payment  : Cash on Delivery
+     Total    : PHP 600.00
+     -------------------------
+
+     Place order? (Y/N): Y
+     Order placed! New cart created.
+    ```
+
+    The order is confirmed, stock is decremented, and a new empty cart is created for the next session.
+  </Step>
+</Steps>
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Architecture" icon="layer-group" href="/architecture">
+    Understand how Core, ApplicationService, and DataService layers fit together.
+  </Card>
+  <Card title="Storage backends" icon="database" href="/storage/overview">
+    Compare InMemory, JSON file, and SQL Server and learn how to switch between them.
+  </Card>
+  <Card title="Vouchers" icon="ticket" href="/features/vouchers">
+    Learn how platform and seller voucher discounts are calculated.
+  </Card>
+  <Card title="Application service reference" icon="code" href="/reference/application-service">
+    Full reference for every method on ICartApplicationService.
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

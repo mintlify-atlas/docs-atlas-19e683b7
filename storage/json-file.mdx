@@ -1,0 +1,87 @@
+---
+title: "JSON file storage: persist cart data between sessions"
+description: "JsonFileDataService reads and writes four JSON files in the app directory, persisting cart and product data across restarts with no database required."
+---
+
+`JsonFileDataService` persists all data to four JSON files in the application's base directory. Data survives application restarts, and no external dependencies are required. If the files don't exist on first run, the service creates them and populates them with seed data automatically.
+
+## How it works
+
+On construction, the service resolves file paths using `AppDomain.CurrentDomain.BaseDirectory` and calls `PopulateInitialData`, which reads each file and seeds it if empty:
+
+```csharp JsonFileDataService.cs
+public JsonFileDataService()
+{
+    var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+    cartsJsonFileName        = Path.Combine(baseDir, "Carts.json");
+    productsJsonFileName     = Path.Combine(baseDir, "Products.json");
+    vouchersJsonFileName     = Path.Combine(baseDir, "Vouchers.json");
+    cartVouchersJsonFileName = Path.Combine(baseDir, "CartVouchers.json");
+
+    PopulateInitialData();
+}
+
+private void PopulateInitialData()
+{
+    RetrieveCartsFromJsonFile();
+    RetrieveProductsFromJsonFile();
+    RetrieveVouchersFromJsonFile();
+    RetrieveCartVouchersFromJsonFile();
+
+    if (dummyProducts.Count == 0)   { PopulateDefaultProducts(); }
+    if (dummyVouchers.Count == 0)   { PopulateDefaultVouchers(); }
+    if (dummyCarts.Count == 0)      { PopulateDefaultCarts(); }
+}
+```
+
+After the first run, each subsequent startup reads the existing files, preserving all changes made in previous sessions.
+
+## JSON files
+
+The service uses four files, one per data type:
+
+| File | Contents |
+|------|----------|
+| `Carts.json` | Array of `Cart` objects including nested `CartItem` lists |
+| `Products.json` | Array of `Product` objects |
+| `Vouchers.json` | Array of `Voucher` objects |
+| `CartVouchers.json` | Array of `CartVoucher` join records |
+
+Every mutating operation (add item, update stock, apply voucher, and so on) re-reads the relevant file before acting and writes it back immediately after, keeping the files in sync with each operation.
+
+<Tip>
+The JSON files are written to `AppDomain.CurrentDomain.BaseDirectory`, which is the `bin/Debug/net*` or `bin/Release/net*` folder where the compiled executable lives. You can open them in any text editor to inspect or manually edit data.
+</Tip>
+
+## File format
+
+Files are serialized with `WriteIndented = true`, so they are human-readable. A `Products.json` file looks like:
+
+```json Products.json
+[
+  {
+    "Id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "Name": "Laptop",
+    "UnitPrice": 45000.00,
+    "Stock": 10,
+    "SellerId": "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed"
+  },
+  ...
+]
+```
+
+<Note>
+Deserialization uses `PropertyNameCaseInsensitive = true`, so JSON property names are matched case-insensitively. You can edit the files manually without worrying about exact casing.
+</Note>
+
+## How to use it
+
+Change the one line in `Program.cs` that instantiates the data service:
+
+```csharp Program.cs
+ICartDataService dataService = new JsonFileDataService();
+ICartValidation validation = new CartValidation();
+_cartService = new CartApplicationService(dataService, validation);
+```
+
+The four JSON files will be created automatically on first run if they do not already exist.

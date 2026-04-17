@@ -1,97 +1,59 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Cart Management System: Console Shopping Cart in C#"
+description: "A C# console application for managing shopping carts with product browsing, voucher discounts, and checkout across three storage backends."
 ---
 
-## Setting up
+Cart Management System is a C# console application that lets you browse products, manage a shopping cart, apply discount vouchers, and complete a checkout — all from a terminal interface. Built with an N-Tier architecture, it supports three interchangeable storage backends: in-memory, JSON file, and SQL Server database.
 
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Run the application in Visual Studio and place your first order in minutes.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Architecture" icon="layer-group" href="/architecture">
+    Understand the N-Tier design and how the three project layers fit together.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Features" icon="cart-shopping" href="/features/cart-management">
+    Explore cart management, products, vouchers, and the checkout flow.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Storage Backends" icon="database" href="/storage/overview">
+    Choose between InMemory, JSON file, or SQL Server for data persistence.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## What you can do
 
-Everything you need to create world-class documentation.
+<CardGroup cols={2}>
+  <Card title="Manage your cart" icon="basket-shopping" href="/features/cart-management">
+    Add items, update quantities, remove products, and view subtotals — with a 10-item type limit per cart.
+  </Card>
+  <Card title="Browse products" icon="tag" href="/features/products">
+    View all available products with live stock levels and prices displayed in PHP.
+  </Card>
+  <Card title="Apply vouchers" icon="ticket" href="/features/vouchers">
+    Use platform-wide or seller-specific discount codes to reduce your order total.
+  </Card>
+  <Card title="Checkout" icon="receipt" href="/features/checkout">
+    Choose a shipping method and payment option, then confirm your order with a summary.
+  </Card>
+</CardGroup>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+## Get started
 
-## Need inspiration?
+<Steps>
+  <Step title="Open in Visual Studio">
+    Clone the repository and open `Cart Management.sln` in Visual Studio.
+  </Step>
+  <Step title="Choose a storage backend">
+    In `Program.cs`, instantiate `InMemoryDataService`, `JsonFileDataService`, or `DatabaseDataService` as your `ICartDataService`.
+  </Step>
+  <Step title="Run the application">
+    Press **F5** or click **Start**. The console menu appears automatically.
+  </Step>
+  <Step title="Place an order">
+    Use the numbered menu to add items, apply a voucher code, and checkout.
+  </Step>
+</Steps>
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<Note>
+  Prices are shown in Philippine Peso (PHP). The default storage backend is `InMemoryDataService` — data is lost when the application exits. Switch to `JsonFileDataService` or `DatabaseDataService` for persistence.
+</Note>

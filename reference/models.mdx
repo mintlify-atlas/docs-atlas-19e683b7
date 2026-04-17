@@ -1,0 +1,209 @@
+---
+title: "Data models: Cart, CartItem, Product, Voucher, enums"
+description: "Property reference for Cart, CartItem, Product, Voucher, CartVoucher, and the CartItemStatus and VoucherType enums used across all layers."
+---
+
+The `Cart_Management.Core.Models` and `Cart_Management.Core.Enums` namespaces define the data structures shared across all layers of the Cart Management System. Models are plain C# classes with no behavior — all business rules are enforced by `CartValidation` and `CartApplicationService`.
+
+---
+
+## Models
+
+<AccordionGroup>
+  <Accordion title="Cart">
+    Represents a shopping cart belonging to a user.
+
+    ```csharp Cart.cs
+    public class Cart
+    {
+        public Guid Id { get; set; }
+        public Guid UserId { get; set; }
+        public List<CartItem> Items { get; set; }
+        public List<Voucher> AppliedVouchers { get; set; } = new List<Voucher>();
+    }
+    ```
+
+    <ResponseField name="Id" type="Guid" required>
+      Unique identifier for the cart. Generated when the cart is created.
+    </ResponseField>
+
+    <ResponseField name="UserId" type="Guid" required>
+      The ID of the user who owns this cart. Each user may have at most one cart.
+    </ResponseField>
+
+    <ResponseField name="Items" type="List&lt;CartItem&gt;">
+      The products currently in the cart. May be `null` if not loaded, or an empty list if the cart has been cleared.
+    </ResponseField>
+
+    <ResponseField name="AppliedVouchers" type="List&lt;Voucher&gt;">
+      Vouchers that have been applied to this cart. Defaults to an empty list.
+    </ResponseField>
+  </Accordion>
+
+  <Accordion title="CartItem">
+    Represents a single product line within a cart, capturing the quantity and price at the time it was added.
+
+    ```csharp CartItem.cs
+    public class CartItem
+    {
+        public Guid ProductId { get; set; }
+        public string ProductName { get; set; }
+        public int Quantity { get; set; }
+        public decimal UnitPrice { get; set; }
+        public CartItemStatus Status { get; set; }
+    }
+    ```
+
+    <ResponseField name="ProductId" type="Guid" required>
+      The ID of the product this item refers to.
+    </ResponseField>
+
+    <ResponseField name="ProductName" type="string" required>
+      The name of the product, copied from the catalog when the item is added.
+    </ResponseField>
+
+    <ResponseField name="Quantity" type="int" required>
+      Number of units in the cart. Always greater than zero.
+    </ResponseField>
+
+    <ResponseField name="UnitPrice" type="decimal" required>
+      Price per unit at the time the item was added or last refreshed. Updated by `UpdateCartItemPrices`.
+    </ResponseField>
+
+    <ResponseField name="Status" type="CartItemStatus" required>
+      Availability status of the item. See [`CartItemStatus`](#cartitemstatus) below.
+    </ResponseField>
+  </Accordion>
+
+  <Accordion title="Product">
+    Represents a product available for purchase in the catalog.
+
+    ```csharp Product.cs
+    public class Product
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; }
+        public int Stock { get; set; }
+        public decimal UnitPrice { get; set; }
+        public Guid SellerId { get; set; }
+    }
+    ```
+
+    <ResponseField name="Id" type="Guid" required>
+      Unique identifier for the product.
+    </ResponseField>
+
+    <ResponseField name="Name" type="string" required>
+      Display name of the product.
+    </ResponseField>
+
+    <ResponseField name="Stock" type="int" required>
+      Number of units currently available. Decremented during checkout.
+    </ResponseField>
+
+    <ResponseField name="UnitPrice" type="decimal" required>
+      Current price per unit. Must be non-negative.
+    </ResponseField>
+
+    <ResponseField name="SellerId" type="Guid" required>
+      The ID of the seller who owns this product. Used to match seller-specific vouchers.
+    </ResponseField>
+  </Accordion>
+
+  <Accordion title="Voucher">
+    Represents a discount voucher that can be applied to a cart.
+
+    ```csharp Voucher.cs
+    public class Voucher
+    {
+        public Guid Id { get; set; }
+        public string Code { get; set; }
+        public VoucherType Type { get; set; }
+        public decimal DiscountAmount { get; set; }
+        public Guid? SellerId { get; set; }
+    }
+    ```
+
+    <ResponseField name="Id" type="Guid" required>
+      Unique identifier for the voucher.
+    </ResponseField>
+
+    <ResponseField name="Code" type="string" required>
+      The string code users enter to apply the voucher (e.g., `"WELCOME100"`).
+    </ResponseField>
+
+    <ResponseField name="Type" type="VoucherType" required>
+      Whether the voucher applies to the whole cart (`Platform`) or only to items from a specific seller (`Seller`). See [`VoucherType`](#vouchertype) below.
+    </ResponseField>
+
+    <ResponseField name="DiscountAmount" type="decimal" required>
+      The fixed amount deducted from the applicable subtotal. For seller vouchers the deduction is capped at the seller's subtotal.
+    </ResponseField>
+
+    <ResponseField name="SellerId" type="Guid?">
+      The seller this voucher belongs to. Required and non-empty for `Seller`-type vouchers; `null` for `Platform`-type vouchers.
+    </ResponseField>
+  </Accordion>
+
+  <Accordion title="CartVoucher">
+    A join entity that records which vouchers have been applied to which carts. Not exposed directly through `ICartApplicationService` — use `GetCartVouchers` to retrieve the full `Voucher` objects for a cart.
+
+    ```csharp CartVoucher.cs
+    public class CartVoucher
+    {
+        public Guid CartId { get; set; }
+        public Guid VoucherId { get; set; }
+    }
+    ```
+
+    <ResponseField name="CartId" type="Guid" required>
+      The ID of the cart.
+    </ResponseField>
+
+    <ResponseField name="VoucherId" type="Guid" required>
+      The ID of the voucher applied to the cart.
+    </ResponseField>
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Enums
+
+<AccordionGroup>
+  <Accordion title="CartItemStatus">
+    Represents the current availability status of an item in the cart. Updated automatically by `AddItem` and `UpdateItemQuantity` based on current stock levels.
+
+    ```csharp CartItemStatus.cs
+    public enum CartItemStatus
+    {
+        NotAvailable,
+        OutOfStock,
+        CheckedOut
+    }
+    ```
+
+    | Value | Description |
+    |-------|-------------|
+    | `NotAvailable` | The item is in the cart and the requested quantity is within available stock. The name reflects that the item is not yet checked out (it is available to purchase). |
+    | `OutOfStock` | The product has no remaining stock, or the cart quantity exceeds what is currently in stock. The item cannot be checked out until stock is replenished or the quantity is reduced. |
+    | `CheckedOut` | Reserved for items that have completed checkout. The value is defined in the enum but is not assigned by the current implementation. |
+  </Accordion>
+
+  <Accordion title="VoucherType">
+    Classifies a voucher by the scope of its discount.
+
+    ```csharp VoucherType.cs
+    public enum VoucherType
+    {
+        Platform,
+        Seller
+    }
+    ```
+
+    | Value | Description |
+    |-------|-------------|
+    | `Platform` | Applies a flat discount to the entire cart total regardless of which seller's products are in the cart. |
+    | `Seller` | Applies a discount only to the subtotal of items from the voucher's associated seller (identified by `SellerId`). The discount is capped at that seller's subtotal so the total never goes below zero. |
+  </Accordion>
+</AccordionGroup>
